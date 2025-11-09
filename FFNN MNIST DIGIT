@@ -1,0 +1,93 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense,Flatten
+from tensorflow.keras.utils import to_categorical
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
+
+data = pd.read_csv("mnist_784_csv.csv")
+data.head()
+
+X = data.drop(columns=['class']).values
+Y = data['class'].values
+
+X.shape
+
+Y.shape
+
+Y = to_categorical(Y,num_classes=10)
+
+x_train , x_test , y_train , y_test = train_test_split(X,Y,test_size=0.2)
+
+print(x_train.shape)
+print(y_train.shape)
+print(x_test.shape)
+print(y_test.shape)
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+plt.figure(figsize=(10, 4))  # width=10, height=4 for 2x5 grid
+
+for i in range(10):  # display 10 images
+    sample_image = x_train[i].reshape(28, 28)
+    digit_label = np.argmax(y_train[i]) if y_train.ndim > 1 else y_train[i]
+    
+    plt.subplot(2, 5, i + 1)  # 2 rows, 5 columns
+    plt.imshow(sample_image, cmap='gray')
+    plt.title(f"Label: {digit_label}", fontsize=8)
+    plt.axis('off')  # remove axis lines and ticks
+
+plt.tight_layout()  # adjust spacing between images
+plt.show()
+
+model = Sequential([Flatten(input_shape=(784,)),
+                    Dense(128,activation='relu'),
+                    Dense(64,activation='relu'),
+                    Dense(10,activation='softmax')
+                   ])
+                   
+model.compile(optimizer='adam',loss='categorical_crossentropy',metrics=['accuracy'])
+
+history = model.fit(x_train,y_train,epochs=5,batch_size=32,validation_split=0.2)
+
+test_loss , test_acc = model.evaluate(x_test,y_test)
+
+print(test_loss)
+print(test_acc)
+
+plt.plot(history.history['accuracy'],label='Training Accuracy')
+plt.plot(history.history['val_accuracy'],label='Validation Accuracy')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.legend()
+plt.show()
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+plt.figure(figsize=(10, 4))  # One figure for all 10 images
+
+for i in range(10):  # Show first 10 test images
+    sample_image = x_test[i].reshape(28, 28)
+    digit_label = np.argmax(y_test[i]) if y_test.ndim > 1 else y_test[i]
+    
+    plt.subplot(2, 5, i + 1)  # 2 rows, 5 columns
+    plt.imshow(sample_image, cmap='gray')
+    plt.title(f"Label: {digit_label}", fontsize=8)
+    plt.axis('off')  # Hide axes for a cleaner look
+
+plt.tight_layout()  # Adjust spacing automatically
+plt.show()
+
+# Ensure y_true is 1-D class indices
+y_true = y_test if y_test.ndim == 1 else np.argmax(y_test, axis=1)
+
+# Predicted class indices
+y_pred = np.argmax(model.predict(x_test, verbose=0), axis=1)
+
+print("\nClassification Report:\n")
+print(classification_report(y_true, y_pred, labels=range(10), digits=4, zero_division=0))
+
