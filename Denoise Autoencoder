@@ -1,0 +1,56 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import tensorflow as tf
+from tensorflow.keras import layers, models
+from sklearn.model_selection import train_test_split
+
+data = pd.read_csv(r"C:/Users/rajat/OneDrive/Documents/DL Codes/MNIST/mnist_784_csv.csv")
+
+X = data.drop(columns=['class']).values.astype('float32')/255.0
+
+x_train, x_test = train_test_split(X, test_size=0.2, random_state=42)
+
+#Add Noise
+noise_factor = 0.5
+x_train_noisy = np.clip(x_train + noise_factor * np.random.normal(0,1,x_train.shape), 0., 1.)
+x_test_noisy = np.clip(x_test + noise_factor * np.random.normal(0,1,x_test.shape), 0., 1.)
+
+#Build model
+input_img = layers.Input(shape=(784,))
+encoded = layers.Dense(64, activation='relu')(input_img)
+decoded = layers.Dense(784, activation='sigmoid')(encoded)
+autoencoder = models.Model(input_img, decoded)
+autoencoder.compile(optimizer='adam', loss='binary_crossentropy')
+
+#Train
+autoencoder.fit(x_train_noisy, x_train,
+                epochs=20,
+                batch_size=256,
+                shuffle=True,
+                validation_data=(x_test_noisy,x_test))
+
+#Predict
+denoised_imgs = autoencoder.predict(x_test_noisy)
+
+#Display results
+n = 10
+plt.figure(figsize=(20,6))
+for i in range(n):
+    ax = plt.subplot(3,n,i+1)
+    plt.imshow(x_test[i].reshape(28,28),cmap='gray')
+    plt.axis('off')
+    if i == 0: ax.set_title("Original")
+
+    ax = plt.subplot(3, n, i + 1 + n)
+    plt.imshow(x_test_noisy[i].reshape(28, 28), cmap='gray')
+    plt.axis('off')
+    if i == 0: ax.set_title("Noisy")
+
+    ax = plt.subplot(3, n, i + 1 + 2*n)
+    plt.imshow(denoised_imgs[i].reshape(28, 28), cmap='gray')
+    plt.axis('off')
+    if i == 0: ax.set_title("Denoised")
+
+plt.show()
+    
