@@ -1,0 +1,104 @@
+import tensorflow as tf
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.utils import load_img, img_to_array
+from tensorflow.keras.applications import DenseNet201
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+import random
+
+base_dir = r"C:/Users/rajat/OneDrive/Documents/DL Codes/food-101-tiny"
+train_dir = os.path.join(base_dir, "train")
+test_dir = os.path.join(base_dir, "valid")
+
+train_datagen = ImageDataGenerator(
+    rescale=1./255,
+    rotation_range=25,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True,
+    validation_split=0.2  # Split 20% of training for validation
+)
+
+train_generator = train_datagen.flow_from_directory(
+    train_dir,
+    target_size=(150, 150),
+    batch_size=32,
+    class_mode='categorical',
+    subset='training'
+)
+
+valid_generator = train_datagen.flow_from_directory(
+    train_dir,
+    target_size=(150, 150),
+    batch_size=32,
+    class_mode='categorical',
+    subset='validation'
+)
+
+num_classes = len(train_generator.class_indices)
+food_classes = list(train_generator.class_indices.keys())
+print(f"Detected {num_classes} Food Classes:", food_classes)
+
+# -----------------------------
+# Build Model (DenseNet201)
+# -----------------------------
+base_model = DenseNet201(weights='imagenet', include_top=False, input_shape=(150,150,3))
+for layer in base_model.layers:
+    layer.trainable = False
+
+x = base_model.output
+x = GlobalAveragePooling2D()(x)
+x = Dense(512, activation='relu')(x)
+x = Dropout(0.5)(x)
+output = Dense(num_classes, activation='softmax')(x)
+
+model = Model(inputs=base_model.input, outputs=output)
+model.compile(optimizer=Adam(learning_rate=1e-4),
+              loss='categorical_crossentropy',
+              metrics=['accuracy'])
+
+
+# -----------------------------
+# Train the Model
+# -----------------------------
+history = model.fit(
+    train_generator,
+    epochs=10,
+    validation_data=valid_generator,
+    verbose=1
+)
+
+plt.figure(figsize=(8,5))
+plt.plot(history.history['accuracy'], label='Train Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title("Training vs Validation Accuracy")
+plt.legend()
+plt.show()
+
+# -----------------------------
+# Test on Random Image (Predicted vs True)
+# -----------------------------
+sample_class = random.choice(food_classes)
+sample_folder = os.path.join(test_dir, sample_class)
+sample_image = random.choice(os.listdir(sample_folder))
+sample_path = os.path.join(sample_folder, sample_image)
+
+# Load and preprocess image (✅ Fixed)
+img = load_img(sample_path, target_size=(150,150))
+img_array = img_to_array(img)
+img_array = np.expand_dims(img_array, axis=0) / 255.0
+
+# Predict
+pred = model.predict(img_array)
+pred_class = food_classes[np.argmax(pred)]
+
+# Display image with Predicted and True label
+plt.imshow(img)
+plt.title(f"Predicted: {pred_class}\nTrue: {sample_class}", fontsize=12)
+plt.axis('off')
+plt.show()
