@@ -1,0 +1,127 @@
+import pandas as pd
+import numpy as np
+import os
+import matplotlib.pyplot as plt
+import tensorflow as tf
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.applications import DenseNet201
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.preprocessing import image
+from sklearn.model_selection import train_test_split
+import random
+
+base_dir = r"C:/Users/rajat/OneDrive/Documents/DL Codes/datasets_dog_breed_classification"
+train_dir = os.path.join(base_dir, "train")
+test_dir = os.path.join(base_dir, "test")
+labels_path = os.path.join(base_dir, "labels.csv")
+
+# -----------------------------
+# Load CSV labels
+# -----------------------------
+labels_df = pd.read_csv(labels_path)
+print("CSV Shape:", labels_df.shape)
+print(labels_df.head())
+
+# If filename column doesn’t include file extension, add it
+if not labels_df['id'][0].endswith('.jpg'):
+    labels_df['id'] = labels_df['id'].apply(lambda x: x + ".jpg")
+
+# Split into training and validation sets
+train_df, valid_df = train_test_split(labels_df, test_size=0.2, stratify=labels_df['breed'], random_state=42)
+
+# -----------------------------
+# Data Generators (from CSV)
+# -----------------------------
+train_datagen = ImageDataGenerator(
+    rescale=1./255,
+    rotation_range=20,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True
+)
+
+valid_datagen = ImageDataGenerator(rescale=1./255)
+
+train_generator = train_datagen.flow_from_dataframe(
+    dataframe=train_df,
+    directory=train_dir,
+    x_col='id',
+    y_col='breed',
+    target_size=(150,150),
+    batch_size=32,
+    class_mode='categorical'
+)
+
+valid_generator = valid_datagen.flow_from_dataframe(
+    dataframe=valid_df,
+    directory=train_dir,
+    x_col='id',
+    y_col='breed',
+    target_size=(150,150),
+    batch_size=32,
+    class_mode='categorical'
+)
+
+num_classes = len(train_generator.class_indices)
+print("Detected Classes:", num_classes)
+
+# -----------------------------
+# Build Model (Transfer Learning)
+# -----------------------------
+base_model = DenseNet201(weights='imagenet', include_top=False, input_shape=(150,150,3))
+for layer in base_model.layers:
+    layer.trainable = False
+
+x = base_model.output
+x = GlobalAveragePooling2D()(x)
+x = Dense(512, activation='relu')(x)
+x = Dropout(0.5)(x)
+output = Dense(num_classes, activation='softmax')(x)
+
+model = Model(inputs=base_model.input, outputs=output)
+model.compile(optimizer=Adam(learning_rate=1e-4),
+              loss='categorical_crossentropy',
+              metrics=['accuracy'])
+
+# -----------------------------
+# Train the Model
+# -----------------------------
+history = model.fit(
+    train_generator,
+    epochs=5,
+    validation_data=valid_generator,
+    verbose=1
+)
+
+plt.figure(figsize=(8,5))
+plt.plot(history.history['accuracy'], label='Train Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title("Training vs Validation Accuracy")
+plt.legend()
+plt.show()
+
+# -----------------------------
+# Predict on Random Test Image (with True Label)
+# -----------------------------
+# Pick a random image from the validation dataframe
+sample_row = valid_df.sample(n=1).iloc[0]
+sample_img_path = os.path.join(train_dir, sample_row['id'])
+true_label = sample_row['breed']
+
+# Load and preprocess image
+img = image.load_img(sample_img_path, target_size=(150,150))
+img_array = image.img_to_array(img)
+img_array = np.expand_dims(img_array, axis=0) / 255.0
+
+# Predict
+pred = model.predict(img_array)
+pred_class = dog_classes[np.argmax(pred)]
+
+# Display image with predicted and true label
+plt.imshow(img)
+plt.title(f"Predicted: {pred_class}\nTrue: {true_label}", fontsize=12)
+plt.axis('off')
+plt.show()
