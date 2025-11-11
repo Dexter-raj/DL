@@ -1,0 +1,75 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import tensorflow as tf
+from tensorflow.keras import layers, models, regularizers
+from sklearn.model_selection import train_test_split
+
+data = pd.read_csv(r"C:/Users/rajat/OneDrive/Documents/DL Codes/MNIST/mnist_784_csv.csv")
+
+print("Dataset Shape:", data.shape)
+
+X = data.drop(columns=['class']).values.astype('float32')
+
+X = X / 255.0
+
+x_train, x_test = train_test_split(X, test_size=0.2, random_state=42)
+
+print("Training Shape:", x_train.shape)
+print("Testing Shape:", x_test.shape)
+
+encoder_dim = 64
+
+#Encoder
+input_img = layers.Input(shape=(784,))
+encoded = layers.Dense(
+    encoder_dim,
+    activation='relu',
+    activity_regularizer=regularizers.l1(1e-5)
+)(input_img)
+
+#Decoder
+decoded = layers.Dense(784, activation='sigmoid')(encoded)
+
+#Autoencoder Model
+autoencoder = models.Model(input_img, decoded)
+autoencoder.compile(optimizer='adam', loss='binary_crossentropy')
+
+history = autoencoder.fit(
+    x_train, x_train,
+    epochs=20,
+    batch_size=256,
+    shuffle=True,
+    validation_data=(x_test, x_test)
+)
+
+decoded_imgs = autoencoder.predict(x_test)
+
+n = 10
+plt.figure(figsize=(20,4))
+for i in range(n):
+    #Original
+    ax = plt.subplot(2, n, i+1)
+    plt.imshow(x_test[i].reshape(28,28), cmap='gray')
+    plt.axis('off')
+
+    #Reconstructed
+    ax = plt.subplot(2, n, i+1+n)
+    plt.imshow(decoded_imgs[i].reshape(28,28), cmap='gray')
+    plt.axis('off')
+
+plt.show()
+
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Reconstruction Loss')
+plt.legend()
+plt.show()
+
+from sklearn.metrics import mean_squared_error
+mse = np.mean(np.square(x_test - decoded_imgs))
+print(f"Average Reconstruction MSE: {mse:.6f}")
+
+
+
